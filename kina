@@ -1,0 +1,56 @@
+#!/bin/bash
+set -eux -o pipefail
+
+NODE_NAME="kina-control-plane"
+NODE_IMAGE="docker.io/kindest/node:v1.34.0@sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a"
+
+create_cluster() {
+	container run \
+		-d \
+		--name "${NODE_NAME}" \
+		-m 8G \
+		-e KUBECONFIG=/etc/kubernetes/admin.conf \
+		-p 127.0.0.1:6443:6443 \
+		"${NODE_IMAGE}"
+
+	# Initialize the cluster
+	# `container run` lacks `--sysctl`, so set it manually
+	container exec "${NODE_NAME}" sysctl -w net.ipv4.ip_forward=1
+	container exec "${NODE_NAME}" kubeadm init --pod-network-cidr=10.244.0.0/16
+
+	# Set up CNI
+	container exec "${NODE_NAME}" sh -euc "sed -e 's@{{ .PodSubnet }}@10.244.0.0/16@' /kind/manifests/default-cni.yaml | kubectl apply -f -"
+
+	# Remove taint to allow scheduling pods on control-plane
+	container exec "${NODE_NAME}" kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+
+	# Set up kubeconfig
+	mkdir -p ~/.kina
+	# No `container cp` exists yet
+	container exec "${NODE_NAME}" cat /etc/kubernetes/admin.conf >~/.kina/kubeconfig
+	echo "=== Run the following command to configure kubectl ==="
+	echo "export KUBECONFIG=\"$HOME/.kina/kubeconfig\""
+}
+
+delete_cluster() {
+	container rm -f "${NODE_NAME}" || true
+	rm -f "$HOME/.kina/kubeconfig"
+}
+
+usage() {
+	echo "Usage: $0 {create|delete} cluster"
+}
+
+if [ "$#" -ne 2 ]; then
+	usage
+	exit 1
+fi
+
+if [[ "$1" == "create" && "$2" == "cluster" ]]; then
+	create_cluster
+elif [[ "$1" == "delete" && "$2" == "cluster" ]]; then
+	delete_cluster
+else
+	usage
+	exit 1
+fi

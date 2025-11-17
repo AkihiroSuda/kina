@@ -37,11 +37,26 @@ delete_cluster() {
 	rm -f "$HOME/.kina/kubeconfig"
 }
 
-usage() {
-	echo "Usage: $0 {create|delete} cluster"
+load_docker_image() {
+	for img in "$@"; do
+		tar=$(mktemp)
+		container image save "$img" --output "$tar"
+		container exec -i "${NODE_NAME}" ctr -n k8s.io image import - <"$tar"
+		rm -f "$tar"
+	done
 }
 
-if [ "$#" -ne 2 ]; then
+load_image_archive() {
+	for tar in "$@"; do
+		container exec -i "${NODE_NAME}" ctr -n k8s.io image import - <"$tar"
+	done
+}
+
+usage() {
+	echo "Usage: $0 {create|delete} cluster | load {docker-image|image-archive}"
+}
+
+if [ "$#" -lt 2 ]; then
 	usage
 	exit 1
 fi
@@ -50,6 +65,10 @@ if [[ "$1" == "create" && "$2" == "cluster" ]]; then
 	create_cluster
 elif [[ "$1" == "delete" && "$2" == "cluster" ]]; then
 	delete_cluster
+elif [[ "$1" == "load" && "$2" == "docker-image" ]]; then
+	shift; shift; load_docker_image "$@"
+elif [[ "$1" == "load" && "$2" == "image-archive" ]]; then
+	shift; shift; load_image_archive "$@"
 else
 	usage
 	exit 1

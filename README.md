@@ -11,7 +11,7 @@ The [original version](https://github.com/AkihiroSuda/kina/tree/v0.0.1) was made
 ```bash
 brew install container kubectl
 
-# Install kina to ~/bin, ,/usr/local/bin, or whereever else
+# Install kina to ~/bin, ,/usr/local/bin, or wherever else
 cp -a kina ~/bin
 ```
 
